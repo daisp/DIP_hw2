@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 from scipy.signal import fftconvolve
+from scipy.fftpack import fft2, ifft2, fftshift
 
 
 def construct_psf_h_from_psf_l(alpha, k_l_size, psf_l):
@@ -54,18 +55,41 @@ def normalize(x):
     return x / np.max(x)
 
 
-def create_images(cont_scene, psfs):
+def find_k(psf_l, psf_h, verbose=False):
+    psf_L = fft2(psf_l)
+    psf_H = fft2(psf_h, shape=psf_L.shape)
+    K = psf_L / psf_H
+    k = abs(ifft2(K))
+    if verbose:
+        plt.imshow(k)
+        plt.show()
+    return k
+
+
+def create_images(cont_scene, psfs, verbose=False):
+    images = []
     for psf in psfs:
         psf = normalize(psf)
         img = get_image_by_psf(cont_scene, psf)
         img = normalize(img)
-        plt.figure()
-        plt.imshow(img)
-        plt.show()
+        images.append(img)
+        if verbose:
+            plt.imshow(img)
+            plt.show()
+    return images
+
+
+def get_ks(psfs, verbose=False):
+    psf_l_g, psf_h_g, psf_l_b, psf_h_b = psfs
+    k_g = find_k(psf_l_g, psf_h_g, verbose)
+    k_b = find_k(psf_l_b, psf_h_b, verbose)
+    return k_g, k_b
 
 
 if __name__ == '__main__':
     cont_scene = cv2.imread('../DIPSourceHW2.png')
     psfs = get_psfs()
-    create_images(cont_scene, psfs)
+    # images = create_images(cont_scene, psfs)
+    psf_l, psf_h = psfs[0], psfs[1]
+    ks = get_ks(psfs, verbose=True)
 
