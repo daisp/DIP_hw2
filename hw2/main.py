@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import math
 from scipy.signal import fftconvolve
 from scipy.fftpack import fft2, ifft2, fftshift
+from skimage.restoration import wiener, denoise_tv_bregman, denoise_tv_chambolle
 
 
 def construct_psf_h_from_psf_l(alpha, k_l_size, psf_l):
@@ -17,53 +18,42 @@ def construct_psf_h_from_psf_l(alpha, k_l_size, psf_l):
     return psf_h
 
 
-def get_low_high_psf_gaussian(alpha = 2.5, k_l_size=25):
+def get_low_high_psf_gaussian(alpha, k_l_size=25):
     psf_l = cv2.getGaussianKernel(k_l_size, 0)
     psf_l = psf_l * np.transpose(psf_l)
     psf_h = construct_psf_h_from_psf_l(alpha, k_l_size, psf_l)
     return psf_l, psf_h
 
 
-def get_low_high_psf_box(alpha=2.5, k_l_size=25):
+def get_low_high_psf_box(alpha, k_l_size=25):
     psf_l = np.zeros((k_l_size, k_l_size), dtype=np.int)
     psf_l[1:k_l_size-1, 1:k_l_size-1] = 1
     psf_h = construct_psf_h_from_psf_l(alpha, k_l_size, psf_l)
     return psf_l, psf_h
 
 
-def get_psfs(alpha = 2.5, verbose=False):
-    psf_l_g, psf_h_g = get_low_high_psf_gaussian()
-    psf_l_b, psf_h_b = get_low_high_psf_box()
+def get_psfs(alpha=2.5, verbose=False):
+    psf_l_g, psf_h_g = get_low_high_psf_gaussian(alpha)
+    psf_l_b, psf_h_b = get_low_high_psf_box(alpha)
     if verbose:
-        plt.imshow(psf_l_g, interpolation='none')
+        plt.imshow(psf_l_g, interpolation='none', cmap='gray')
         plt.show()
-        plt.imshow(psf_h_g, interpolation='none')
+        plt.imshow(psf_h_g, interpolation='none', cmap='gray')
         plt.show()
-        plt.imshow(psf_l_b, interpolation='none')
+        plt.imshow(psf_l_b, interpolation='none', cmap='gray')
         plt.show()
-        plt.imshow(psf_h_b, interpolation='none')
+        plt.imshow(psf_h_b, interpolation='none', cmap='gray')
         plt.show()
     return psf_l_g, psf_h_g, psf_l_b, psf_h_b
 
 
 def get_image_by_psf(cont_scene, psf):
-    return fftconvolve(cont_scene, psf[:, :, np.newaxis], mode='same')
+    return fftconvolve(cont_scene, psf, mode='same')
 
 
 def normalize(x):
     x -= np.min(x)
     return x / np.max(x)
-
-
-def find_k(psf_l, psf_h, verbose=False):
-    psf_L = fft2(psf_l)
-    psf_H = fft2(psf_h, shape=psf_L.shape)
-    K = psf_L / psf_H
-    k = abs(ifft2(K))
-    if verbose:
-        plt.imshow(k)
-        plt.show()
-    return k
 
 
 def create_images(cont_scene, psfs, verbose=False):
@@ -74,9 +64,20 @@ def create_images(cont_scene, psfs, verbose=False):
         img = normalize(img)
         images.append(img)
         if verbose:
-            plt.imshow(img)
+            plt.imshow(img, cmap='gray')
             plt.show()
     return images
+
+
+def find_k(psf_l, psf_h, verbose=False):
+    psf_L = fft2(psf_l)
+    psf_H = fft2(cv2.copyMakeBorder(psf_h, *([(psf_l.shape[0]-psf_h.shape[0])//2]*4), cv2.BORDER_CONSTANT, 0))
+    K = psf_L / psf_H
+    k = abs(fftshift(ifft2(K)))
+    if verbose:
+        plt.imshow(k, cmap='gray')
+        plt.show()
+    return k
 
 
 def get_ks(psfs, verbose=False):
@@ -86,10 +87,21 @@ def get_ks(psfs, verbose=False):
     return k_g, k_b
 
 
+def estimate_images(low_res_k_tuple, verbose=False):
+    for img, k in low_res_k_tuple:
+        restored_img_winer = wiener(img, k, 1)
+        restored_img = denoise_tv_chambolle(img, 0.1)
+        if verbose == True:
+            plt.imshow(restored_img, cmap='gray')
+            plt.show()
+    pass
+
+
 if __name__ == '__main__':
-    cont_scene = cv2.imread('../DIPSourceHW2.png')
-    psfs = get_psfs()
-    # images = create_images(cont_scene, psfs)
-    psf_l, psf_h = psfs[0], psfs[1]
+    cont_scene = cv2.imread('../DIPSourceHW2.png', cv2.IMREAD_GRAYSCALE)
+    psfs = get_psfs(verbose=False)
+    images_from_psf = create_images(cont_scene, psfs, verbose=False)
     ks = get_ks(psfs, verbose=True)
+    imgs_to_estimate = [(images_from_psf[0], ks[0]), (images_from_psf[2], ks[1])]
+    est_imgs = estimate_images(imgs_to_estimate, verbose=True)
 
