@@ -5,6 +5,8 @@ import math
 from scipy.signal import fftconvolve
 from scipy.fftpack import fft2, ifft2, fftshift
 from skimage.restoration import wiener, denoise_tv_bregman, denoise_tv_chambolle
+from hw2.sporco.admm.tvl1 import TVL1Deconv
+from hw2.sporco.admm.tvl2 import TVL2Deconv
 
 
 def construct_psf_h_from_psf_l(alpha, k_l_size, psf_l):
@@ -27,7 +29,7 @@ def get_low_high_psf_gaussian(alpha, k_l_size=25):
 
 def get_low_high_psf_box(alpha, k_l_size=25):
     psf_l = np.zeros((k_l_size, k_l_size), dtype=np.int)
-    psf_l[1:k_l_size-1, 1:k_l_size-1] = 1
+    psf_l[1:k_l_size - 1, 1:k_l_size - 1] = 1
     psf_h = construct_psf_h_from_psf_l(alpha, k_l_size, psf_l)
     return psf_l, psf_h
 
@@ -71,7 +73,7 @@ def create_images(cont_scene, psfs, verbose=False):
 
 def find_k(psf_l, psf_h, verbose=False):
     psf_L = fft2(psf_l)
-    psf_H = fft2(cv2.copyMakeBorder(psf_h, *([(psf_l.shape[0]-psf_h.shape[0])//2]*4), cv2.BORDER_CONSTANT, 0))
+    psf_H = fft2(cv2.copyMakeBorder(psf_h, *([(psf_l.shape[0] - psf_h.shape[0]) // 2] * 4), cv2.BORDER_CONSTANT, 0))
     K = psf_L / psf_H
     k = abs(fftshift(ifft2(K)))
     if verbose:
@@ -89,10 +91,16 @@ def get_ks(psfs, verbose=False):
 
 def estimate_images(low_res_k_tuple, verbose=False):
     for img, k in low_res_k_tuple:
-        restored_img_winer = wiener(img, k, 1)
-        restored_img = denoise_tv_chambolle(img, 0.1)
-        if verbose == True:
+        # restored_img_wiener = wiener(img, k, 1)
+        restored_img = TVL2Deconv(k, img, 0.01).solve()
+        if verbose:
+            # fig = plt.figure()
+            # plt.imshow(restored_img_wiener, cmap='gray')
+            # fig.suptitle("Wiener")
+            # plt.show()
+            fig = plt.figure()
             plt.imshow(restored_img, cmap='gray')
+            fig.suptitle("TV")
             plt.show()
     pass
 
@@ -101,7 +109,6 @@ if __name__ == '__main__':
     cont_scene = cv2.imread('../DIPSourceHW2.png', cv2.IMREAD_GRAYSCALE)
     psfs = get_psfs(verbose=False)
     images_from_psf = create_images(cont_scene, psfs, verbose=False)
-    ks = get_ks(psfs, verbose=True)
+    ks = get_ks(psfs, verbose=False)
     imgs_to_estimate = [(images_from_psf[0], ks[0]), (images_from_psf[2], ks[1])]
     est_imgs = estimate_images(imgs_to_estimate, verbose=True)
-
