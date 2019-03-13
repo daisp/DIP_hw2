@@ -1,0 +1,13 @@
+future
+scipy
+sphinx>=1.6
+numpydoc
+sphinxcontrib-bibtex
+sphinx_tabs
+sphinx_fontawesome
+pygraphviz
+jonga
+ipython>=6.3.1
+jupyter
+py2jn
+pypandoc
